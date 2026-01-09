@@ -1,0 +1,105 @@
+name: Lab3 CI/CD
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  backend-ci-cd:
+    name: Build, test, and deploy backend services
+    runs-on: ubuntu-latest
+
+    # Run the same pipeline for each backend service
+    strategy:
+      matrix:
+        service:
+          - communication-service
+          - image-service
+          - profile-service
+          - search-service
+          - user-service
+
+    # MySQL backing your Spring tests
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: journal
+        ports:
+          - 3307:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    # Global env for all steps in this job
+    env:
+      # Container registry config  (change to match your cbhcloud / Harbor / GHCR setup)
+      REGISTRY_URL: registry.cbh.kth.se           # e.g. Harbor host
+      REGISTRY_NAMESPACE: your-namespace-here     # e.g. your username / project
+
+      # DB config used by Spring Boot during tests
+      SPRING_DATASOURCE_URL: jdbc:mysql://localhost:3307/journal?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+
+    # All `run:` commands will execute from the service folder
+    defaults:
+      run:
+        working-directory: ${{ matrix.service }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"       # match your local Java; change if needed
+          cache: maven
+
+      # ---- CI: build + test ----
+      - name: Run unit tests
+        run: mvn -B test
+
+      - name: Build application JAR
+        run: mvn -B package -DskipTests
+
+      # ---- CD: build + push image (only on push to main) ----
+      - name: Log in to container registry
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: echo "${{ secrets.REGISTRY_PASSWORD }}" | docker login ${{ env.REGISTRY_URL }} -u "${{ secrets.REGISTRY_USERNAME }}" --password-stdin
+
+      - name: Build Docker image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          IMAGE_NAME=${{ env.REGISTRY_URL }}/${{ env.REGISTRY_NAMESPACE }}/${{ matrix.service }}:${{ github.sha }}
+          echo "Building image $IMAGE_NAME"
+          docker build -t "$IMAGE_NAME" .
+
+      - name: Push Docker image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          IMAGE_NAME=${{ env.REGISTRY_URL }}/${{ env.REGISTRY_NAMESPACE }}/${{ matrix.service }}:${{ github.sha }}
+          echo "Pushing image $IMAGE_NAME"
+          docker push "$IMAGE_NAME"
+
+      # ---- Deploy to cbhcloud (only on push to main) ----
+      - name: Configure kubectl
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" > ~/.kube/config
+
+      - name: Deploy to cbhcloud
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        # still running inside the service directory; go up to k8s/
+        working-directory: .
+        run: |
+          # Assumes manifest naming like: k8s/communication-service.yaml, k8s/user-service.yaml, etc.
+          kubectl apply -f ../k8s/${{ matrix.service }}.yaml
