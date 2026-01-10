@@ -267,6 +267,13 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8082
+          env:
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:mysql://mysql:3306/journal?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC"
+            - name: SPRING_DATASOURCE_USERNAME
+              value: "appuser"
+            - name: SPRING_DATASOURCE_PASSWORD
+              value: "apppass"
 ---
 apiVersion: v1
 kind: Service
