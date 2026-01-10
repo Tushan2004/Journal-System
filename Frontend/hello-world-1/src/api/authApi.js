@@ -1,4 +1,4 @@
-const USER_BASE = "http://localhost:8080";   // user-service
+const USER_BASE = "http://localhost:8081";   // user-service
 const PROFILE_BASE = "http://localhost:8081"; // profile-service
 
 export async function register({ email, password, role, firstName, lastName }) {

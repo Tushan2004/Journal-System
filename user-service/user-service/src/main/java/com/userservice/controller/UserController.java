@@ -1,14 +1,16 @@
 package com.userservice.controller;
 
-import com.userservice.dto.LoginRequest;
 import com.userservice.dto.RegisterRequest;
-import com.userservice.dto.RegisterResponse;
 import com.userservice.entity.User;
 import com.userservice.repository.UserRepository;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Collection;
 import java.util.Map;
 
 @RestController
@@ -22,11 +24,12 @@ public class UserController {
         this.userRepo = userRepo;
     }
 
+    // -------------------------
+    // Public endpoint: register
+    // -------------------------
     @PostMapping("/register")
     @Transactional
     public ResponseEntity<?> register(@RequestBody RegisterRequest r) {
-
-        // Basic validation
         if (r.role() == null)
             return ResponseEntity.badRequest().body("Role is required");
         if (r.email() == null || r.email().isBlank())
@@ -34,44 +37,51 @@ public class UserController {
         if (r.password() == null || r.password().isBlank())
             return ResponseEntity.badRequest().body("Password is required");
 
-        // Check duplicate email
-        if (userRepo.findByEmail(r.email()).isPresent()) {
+        if (userRepo.findByEmail(r.email()).isPresent())
             return ResponseEntity.badRequest().body("Email already in use");
-        }
 
-        // 1) Create User
-        var u = new User();
+        User u = new User();
         u.setEmail(r.email());
         u.setRole(r.role());
-        u.setPassword(r.password());
+        u.setPassword(r.password()); // OBS: lösenord behövs endast om du lagrar lokalt
         userRepo.save(u);
 
-        return ResponseEntity.ok(
-                Map.of(
-                        "id", u.getId(),
-                        "role", u.getRole()  // or u.getRole().name()
-                )
-        );
+        return ResponseEntity.ok(Map.of(
+                "id", u.getId(),
+                "role", u.getRole()
+        ));
     }
 
-    @PostMapping("/login")
-    public ResponseEntity<User> login(@RequestBody LoginRequest req) {
-        var userOpt = userRepo.findByEmail(req.email());
+    // ----------------------------------------
+    // Protected endpoint: visa info om nuvarande användare
+    // ----------------------------------------
+    @GetMapping("/me")
+    public ResponseEntity<Map<String, Object>> me(@AuthenticationPrincipal Jwt jwt) {
+        String username = jwt.getClaim("preferred_username"); // alltid satt
+        Collection<String> roles = (Collection<String>) ((Map<String, Object>) jwt.getClaim("realm_access")).get("roles");
 
-        // user not found
-        if (userOpt.isEmpty()) {
-            // 401 with NO body (type is still ResponseEntity<User>)
-            return ResponseEntity.status(401).build();
-        }
+        return ResponseEntity.ok(Map.of(
+                "username", username,
+                "roles", roles
+        ));
+    }
 
-        var user = userOpt.get();
 
-        // wrong password
-        if (!req.password().equals(user.getPassword())) {
-            return ResponseEntity.status(401).build();
-        }
+    // ----------------------------------------
+    // Protected endpoint: ADMIN only
+    // ----------------------------------------
+    @GetMapping("/admin")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<String> adminEndpoint() {
+        return ResponseEntity.ok("Endast ADMIN kan se detta");
+    }
 
-        // success -> return the User entity
-        return ResponseEntity.ok(user);
+    // ----------------------------------------
+    // Protected endpoint: MANAGER only
+    // ----------------------------------------
+    @GetMapping("/manager")
+    @PreAuthorize("hasRole('MANAGER')")
+    public ResponseEntity<String> managerEndpoint() {
+        return ResponseEntity.ok("Endast MANAGER kan se detta");
     }
 }
