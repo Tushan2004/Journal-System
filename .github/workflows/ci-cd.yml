@@ -205,7 +205,7 @@ jobs:
       - name: Build & push image
         uses: docker/build-push-action@v5
         with:
-          context: ./Frontend
+          context: ./Frontend/hello-world-1
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/frontend:latest
