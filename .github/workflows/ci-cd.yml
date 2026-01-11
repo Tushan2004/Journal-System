@@ -200,4 +200,4 @@ jobs:
           context: ./Frontend/hello-world-1
           push: true
           tags: |
-            registry.cloud.cbh.kth.se/deploy-17874566-de03-424c-a14b-2fbac442e28c/frontend-barua:
+            registry.cloud.cbh.kth.se/deploy-17874566-de03-424c-a14b-2fbac442e28c/frontend-barua:latest
