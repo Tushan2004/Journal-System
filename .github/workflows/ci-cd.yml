@@ -208,4 +208,4 @@ jobs:
           context: ./Frontend/hello-world-1
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/frontend:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/frontend-barua:latest
